@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento de Tarefas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navbar preta com dropdown -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Gerenciador de Tarefas</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavDropdown">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span id="userName">Usuário</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li><a class="dropdown-item" href="#" onclick="logout()">Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 class="mt-5">Gerenciar Tarefas</h2>
+
+        <!-- Formulário para adicionar tarefa -->
+        <form id="taskForm">
+            <div class="mb-3">
+                <label for="titulo" class="form-label">Título</label>
+                <input type="text" class="form-control" id="titulo" required>
+            </div>
+            <div class="mb-3">
+                <label for="descricao" class="form-label">Descrição</label>
+                <input type="text" class="form-control" id="descricao" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Adicionar Tarefa</button>
+        </form>
+
+        <!-- Lista de tarefas -->
+        <h3 class="mt-5">Tarefas</h3>
+        <ul id="taskList" class="list-group"></ul>
+    </div>
+
+    <!-- Modal para editar tarefa -->
+    <div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editTaskModalLabel">Editar Tarefa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editTaskForm">
+                        <div class="mb-3">
+                            <label for="editTitulo" class="form-label">Título</label>
+                            <input type="text" class="form-control" id="editTitulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editDescricao" class="form-label">Descrição</label>
+                            <input type="text" class="form-control" id="editDescricao" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editStatus" class="form-label">Status</label>
+                            <select class="form-select" id="editStatus">
+                                <option value="Pendente">Pendente</option>
+                                <option value="Em andamento">Em andamento</option>
+                                <option value="Concluído">Concluído</option>
+                            </select>
+                        </div>
+                        <input type="hidden" id="editTaskId">
+                        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Exibe o nome do usuário logado
+        function loadUserName() {
+            const token = localStorage.getItem("token");
+
+            // Decodifica o token JWT para pegar o nome de usuário
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            const user = JSON.parse(jsonPayload).sub;  // O 'sub' no token representa o user_id ou o username
+            document.getElementById("userName").innerText = user;
+        }
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem("token");
+            window.location.href = "/login";  // Redireciona para a tela de login
+        }
+
+        // Adiciona nova tarefa
+        document.getElementById("taskForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const titulo = document.getElementById("titulo").value;
+            const descricao = document.getElementById("descricao").value;
+            const token = localStorage.getItem("token");
+
+            fetch("http://127.0.0.1:8000/tasks/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    titulo: titulo,
+                    descricao: descricao
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadTasks();  // Carrega as tarefas após adicionar
+            })
+            .catch(error => console.log(error));
+        });
+
+        // Função para carregar as tarefas
+        function loadTasks() {
+            const token = localStorage.getItem("token");
+            fetch("http://127.0.0.1:8000/tasks/", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const taskList = document.getElementById("taskList");
+                taskList.innerHTML = "";  // Limpa a lista antes de adicionar
+                data.forEach(task => {
+                    const listItem = document.createElement("li");
+                    listItem.className = "list-group-item d-flex justify-content-between align-items-center";
+                    listItem.innerHTML = `
+                        ${task.titulo} - ${task.descricao} (${task.status})
+                        <div>
+                            <button class="btn btn-warning btn-sm me-2" onclick="openEditModal(${task.id}, '${task.titulo}', '${task.descricao}', '${task.status}')">Editar</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteTask(${task.id})">Excluir</button>
+                        </div>
+                    `;
+                    taskList.appendChild(listItem);
+                });
+            })
+            .catch(error => console.log(error));
+        }
+
+        // Função para deletar tarefa
+        function deleteTask(taskId) {
+            const token = localStorage.getItem("token");
+            fetch(`http://127.0.0.1:8000/tasks/${taskId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            })
+            .then(() => {
+                loadTasks();  // Carrega as tarefas após excluir
+            })
+            .catch(error => console.log(error));
+        }
+
+        // Função para abrir o modal de edição e preencher os campos
+        function openEditModal(taskId, titulo, descricao, status) {
+            document.getElementById("editTaskId").value = taskId;
+            document.getElementById("editTitulo").value = titulo;
+            document.getElementById("editDescricao").value = descricao;
+            document.getElementById("editStatus").value = status;
+            var editTaskModal = new bootstrap.Modal(document.getElementById("editTaskModal"));
+            editTaskModal.show();
+        }
+
+        // Função para salvar as alterações da tarefa editada
+        document.getElementById("editTaskForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const taskId = document.getElementById("editTaskId").value;
+            const titulo = document.getElementById("editTitulo").value;
+            const descricao = document.getElementById("editDescricao").value;
+            const status = document.getElementById("editStatus").value;
+            const token = localStorage.getItem("token");
+
+            fetch(`http://127.0.0.1:8000/tasks/${taskId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    titulo: titulo,
+                    descricao: descricao,
+                    status: status
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                var editTaskModal = bootstrap.Modal.getInstance(document.getElementById("editTaskModal"));
+                editTaskModal.hide();  // Fecha o modal após salvar
+                loadTasks();  // Recarrega a lista de tarefas
+            })
+            .catch(error => console.log(error));
+        });
+
+        // Função para verificar se o usuário está autenticado
+        function checkAuthentication() {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                // Se não houver token, redireciona para a página de login
+                window.location.href = "/login";
+            }
+        }
+
+        // Chame a função ao carregar a página de tarefas
+        window.onload = function() {
+            checkAuthentication();
+            loadTasks();
+            loadUserName();
+        };
+
+        // Carrega as tarefas e o nome do usuário ao abrir a página
+        window.onload = function() {
+            loadTasks();
+            loadUserName();
+        };
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
